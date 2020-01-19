@@ -1,0 +1,19 @@
+with "hal.gpr";
+with "sdlada.gpr";
+
+project PyGamer_Simulator is
+
+   for Languages use ("Ada", "C");
+
+   for Source_Dirs use ("src/**");
+   for Object_Dir use "obj";
+   for Exec_Dir use ".";
+
+   for Create_Missing_Dirs use "True";
+
+   package Linker is
+      for Default_Switches ("Ada") use ("-lSDL2",
+                                        "-lSDL2_image");
+  end Linker;
+
+end PyGamer_Simulator;
