@@ -74,12 +74,12 @@ package body PyGamer.Screen is
       end if;
 
       SDL.Video.Windows.Makers.Create
-        (W, "GESTE Example",
+        (W, "PyGamer Simulator",
          0,
          0,
          779,
          439,
-         Flags    => SDL.Video.Windows.Resizable);
+         Flags    => SDL.Video.Windows.Windowed);
 
       SDL.Video.Renderers.Makers.Create (Renderer, W);
 

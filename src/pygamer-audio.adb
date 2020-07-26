@@ -2,6 +2,8 @@ with System;
 with Interfaces;   use Interfaces;
 with Interfaces.C; use Interfaces.C;
 
+with GNAT.OS_Lib;
+
 package body PyGamer.Audio is
 
    User_Callback : Audio_Callback := null;
@@ -55,6 +57,10 @@ package body PyGamer.Audio is
                            Sample_Rate : Sample_Rate_Kind) is
    begin
       User_Callback := Callback;
+
+      if GNAT.OS_Lib.Getenv ("OS").all = "Windows_NT" then -- Memory leak right here...
+         GNAT.OS_Lib.Setenv ("SDL_AUDIODRIVER", "directsound");
+      end if;
 
       if Init_SDL_Audio (case Sample_Rate is
                             when SR_11025 => 11_025,
