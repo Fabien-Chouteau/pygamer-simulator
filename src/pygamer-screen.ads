@@ -11,12 +11,19 @@ package PyGamer.Screen is
    procedure Start_Pixel_TX;
    procedure End_Pixel_TX;
 
-   procedure Push_Pixels (Data : HAL.UInt16_Array);
+   procedure Push_Pixels (Data : aliased HAL.UInt16_Array);
 
-   procedure Push_Pixels_Swap (Data : in out HAL.UInt16_Array);
+   procedure Push_Pixels_Swap (Data : aliased in out HAL.UInt16_Array);
 
    procedure Scroll (Val : HAL.UInt8);
 
    procedure Debug_Mode (Enabled : Boolean);
+
+   -- DMA --
+
+   type Framebuffer_Access is access constant HAL.UInt16_Array;
+
+   procedure Start_DMA (Data : not null Framebuffer_Access);
+   procedure Wait_End_Of_DMA;
 
 end PyGamer.Screen;

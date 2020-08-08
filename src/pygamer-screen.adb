@@ -170,7 +170,7 @@ package body PyGamer.Screen is
    -- Push_Pixels --
    -----------------
 
-   procedure Push_Pixels (Data : HAL.UInt16_Array) is
+   procedure Push_Pixels (Data : aliased HAL.UInt16_Array) is
       Actual_Pixels : Texture_1D_Array (0 .. Natural (Width * Height - 1))
         with
           Address => SDL_Pixels;
@@ -212,7 +212,7 @@ package body PyGamer.Screen is
    -- Push_Pixels --
    -----------------
 
-   procedure Push_Pixels_Swap (Data : in out HAL.UInt16_Array) is
+   procedure Push_Pixels_Swap (Data : aliased in out HAL.UInt16_Array) is
       Actual_Pixels : Texture_1D_Array (0 .. Natural (Width * Height - 1))
         with
           Address => SDL_Pixels;
@@ -251,10 +251,30 @@ package body PyGamer.Screen is
       Scroll_Val := Val mod Width;
    end Scroll;
 
+   ----------------
+   -- Debug_Mode --
+   ----------------
+
    procedure Debug_Mode (Enabled : Boolean) is
    begin
       Debug_Enabled := Enabled;
    end Debug_Mode;
+
+   ---------------
+   -- Start_DMA --
+   ---------------
+
+   procedure Start_DMA (Data : not null Framebuffer_Access) is
+   begin
+      --  We don't really have a DMA here...
+      Push_Pixels (Data.all);
+   end Start_DMA;
+
+   ---------------------
+   -- Wait_End_Of_DMA --
+   ---------------------
+
+   procedure Wait_End_Of_DMA is null;
 
 begin
    Initialize;
