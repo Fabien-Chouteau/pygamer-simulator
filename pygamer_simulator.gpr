@@ -1,4 +1,5 @@
-with "config/pygamer_simulator_config.gpr";
+with "asfml.gpr";
+with "hal.gpr";
 
 project PyGamer_Simulator is
 

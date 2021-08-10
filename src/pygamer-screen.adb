@@ -92,7 +92,7 @@ package body PyGamer.Screen is
       Actual_Pixels : array (0 .. Natural (Width * Height - 1)) of sfColor
         with Address => Frame_Buffer'Address;
 
-      Data : HAL.UInt16_Array (1 .. Len - 1) with Address => Addr;
+      Data : HAL.UInt16_Array (1 .. Len) with Address => Addr;
    begin
 
       for Pix of Data loop
