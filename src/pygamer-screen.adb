@@ -1,100 +1,44 @@
+with Ada.Text_IO; use Ada.Text_IO;
+
 with HAL; use HAL;
 
-with SDL;
-with SDL.Video.Windows;
-with SDL.Video.Windows.Makers;
-with SDL.Video.Surfaces;
-with SDL.Video.Pixel_Formats;
-with SDL.Video.Palettes;      use SDL.Video.Palettes;
-with SDL.Video.Pixel_Formats; use SDL.Video.Pixel_Formats;
-with SDL.Video.Textures;      use SDL.Video.Textures;
-with SDL.Video.Textures.Makers;
-with SDL.Video.Renderers;
-with SDL.Video.Renderers.Makers;
-with SDL.Images;
-with SDL.Images.IO;
-
-use SDL.Video;
 with Interfaces.C; use Interfaces.C;
-with SDL.Video.Pixels;
 with Ada.Unchecked_Conversion;
 with System;
 
+with sf.Graphics.RenderWindow; use sf.Graphics.RenderWindow;
+with Sf.Graphics.Color; use Sf.Graphics.Color;
+with Sf; use Sf;
+with Sf.Graphics.Texture; use Sf.Graphics.Texture;
+with Sf.Graphics; use Sf.Graphics;
+
 package body PyGamer.Screen is
 
-   Scroll_Val : UInt8 := 0;
-
-   Cnt : UInt16 := 0;
-
    Pixel_Scale : constant := 3;
-
-   W          : SDL.Video.Windows.Window;
-   Renderer   : SDL.Video.Renderers.Renderer;
-   Texture    : SDL.Video.Textures.Texture;
-   SDL_Pixels : System.Address;
 
    XS, XE, YS, YE : Natural := 0;
    X, Y : Natural := 0;
 
    Debug_Enabled : Boolean := False;
-   Debug_Color   : UInt16 := 100;
+   Debug_Color   : sfUInt32 := 100;
 
-   type Texture_2D_Array is array (Natural range <>,
-                                   Natural range <>)
-     of aliased HAL.UInt16;
+   generic
+      with function Convert_Pix (Pix : UInt16) return sfColor;
+   procedure Push_Pixels_Gen (Addr : System.Address; Len : Natural);
 
-   type Texture_1D_Array is array (Natural range <>)
-     of aliased HAL.UInt16;
+   function RGB565_To_Color (Pix : HAL.UInt16) return sfColor is
+      R : constant UInt32 := UInt32 (Shift_Right (Pix, 11)) and 2#11111#;
+      G : constant UInt32 := UInt32 (Shift_Right (Pix, 5)) and 2#111111#;
+      B : constant UInt32 := UInt32 (Shift_Right (Pix, 0)) and 2#11111#;
 
-   package Texture_2D is new SDL.Video.Pixels.Texture_Data
-     (Index              => Natural,
-      Element            => HAL.UInt16,
-      Element_Array_1D   => Texture_1D_Array,
-      Element_Array_2D   => Texture_2D_Array,
-      Default_Terminator => 0);
-
-   procedure Lock is new SDL.Video.Textures.Lock
-     (Pixel_Pointer_Type => System.Address);
-
-   function To_Address is
-     new Ada.Unchecked_Conversion
-       (Source => SDL.Video.Pixels.ARGB_8888_Access.Pointer,
-        Target => System.Address);
-
-   procedure Initialize;
-
-   ----------------
-   -- Initialize --
-   ----------------
-
-   procedure Initialize is
+      R8 : constant UInt32 := UInt32 (Float (R) * 255.0 / 31.0);
+      G8 : constant UInt32 := UInt32 (Float (G) * 255.0 / 63.0);
+      B8 : constant UInt32 := UInt32 (Float (B) * 255.0 / 31.0);
    begin
-      if not SDL.Initialise (Flags => SDL.Enable_Screen) then
-         raise Program_Error with "SDL Video init failed";
-      end if;
-
-      SDL.Video.Windows.Makers.Create
-        (W, "PyGamer Simulator",
-         0,
-         0,
-         779,
-         439,
-         Flags    => SDL.Video.Windows.Windowed);
-
-      SDL.Video.Renderers.Makers.Create (Renderer, W);
-
-      SDL.Video.Textures.Makers.Create
-        (Tex      => Texture,
-         Renderer => Renderer,
-         Format   => SDL.Video.Pixel_Formats.Pixel_Format_RGB_565,
-         Kind     => SDL.Video.Textures.Streaming,
-         Size     => (Width, Height));
-
-      if not SDL.Images.Initialise then
-         raise Program_Error with "SDL Image init failed";
-      end if;
-
-   end Initialize;
+      return Sf.Graphics.Color.fromRGB (sfUint8 (R8 and 16#FF#),
+                                        sfUint8 (G8 and 16#FF#),
+                                        sfUint8 (B8 and 16#FF#));
+   end RGB565_To_Color;
 
    -----------------
    -- Set_Address --
@@ -120,7 +64,6 @@ package body PyGamer.Screen is
       if YE >= Height then
          raise Program_Error;
       end if;
-      Cnt := Cnt + 1;
    end Set_Address;
 
    --------------------
@@ -129,7 +72,7 @@ package body PyGamer.Screen is
 
    procedure Start_Pixel_TX is
    begin
-      Lock (Texture, SDL_Pixels);
+      null;
    end Start_Pixel_TX;
 
    ------------------
@@ -138,57 +81,25 @@ package body PyGamer.Screen is
 
    procedure End_Pixel_TX is
    begin
-      Texture.Unlock;
-
-      Renderer.Clear;
-
-      --  Copy in two sections to simulate the ST7735R hardware scrolling
-
-      Renderer.Copy (Texture,
-                     From  => (0,
-                               0,
-                               int (Width) - int (Scroll_Val),
-                               int (Height)),
-                     To => (int (Scroll_Val) * Pixel_Scale,
-                            0,
-                            (int (Width) - int (Scroll_Val)) * Pixel_Scale,
-                            int (Height) * Pixel_Scale));
-
-      Renderer.Copy (Texture,
-                     From  => (int (Width) - int (Scroll_Val),
-                               0,
-                               int (Scroll_Val),
-                               int (Height)),
-                     To => (0,
-                            0,
-                            int (Scroll_Val) * Pixel_Scale,
-                            int (Height) * Pixel_Scale));
-      Renderer.Present;
+      null;
    end End_Pixel_TX;
 
-   -----------------
-   -- Push_Pixels --
-   -----------------
+   ---------------------
+   -- Push_Pixels_Gen --
+   ---------------------
 
-   procedure Push_Pixels (Data : aliased HAL.UInt16_Array) is
-      Actual_Pixels : Texture_1D_Array (0 .. Natural (Width * Height - 1))
-        with
-          Address => SDL_Pixels;
+   procedure Push_Pixels_Gen (Addr : System.Address; Len : Natural) is
+      Actual_Pixels : array (0 .. Natural (Width * Height - 1)) of sfColor
+        with Address => Frame_Buffer'Address;
 
-      Swapped_Data : HAL.UInt16_Array (Data'Range);
+      Data : HAL.UInt16_Array (1 .. Len - 1) with Address => Addr;
    begin
 
-      --  Byte swap is inverted in the PyGamer simulator
-      for Index in Data'Range loop
-         Swapped_Data (Index) := Shift_Right (Data (Index) and 16#FF00#, 8) or
-           (Shift_Left (Data (Index), 8) and 16#FF00#);
-      end loop;
-
-      for Pix of Swapped_Data loop
+      for Pix of Data loop
          if Debug_Enabled then
-            Actual_Pixels (X + Y * Width) := Debug_Color;
+            Actual_Pixels (X + Y * Width) := fromInteger (16#FF_00_00_00# or Debug_Color);
          else
-            Actual_Pixels (X + Y * Width) := Pix;
+            Actual_Pixels (X + Y * Width) := Convert_Pix (Pix);
          end if;
 
          if X = XE then
@@ -206,40 +117,36 @@ package body PyGamer.Screen is
       if Debug_Enabled then
          Debug_Color := Debug_Color + 1000;
       end if;
+   end Push_Pixels_Gen;
+
+   -----------------
+   -- Push_Pixels --
+   -----------------
+
+   procedure Push_Pixels (Addr : System.Address; Len : Natural) is
+
+      function Convert_Pix (Pix : HAL.UInt16) return sfColor is
+
+         --  Byte swap is inverted in the PyGamer simulator
+         Swap : constant UInt16 := Shift_Right (Pix and 16#FF00#, 8) or
+           (Shift_Left (Pix, 8) and 16#FF00#);
+      begin
+         return RGB565_To_Color (Swap);
+      end Convert_Pix;
+
+      procedure Push is new Push_Pixels_Gen (Convert_Pix);
+   begin
+      Push (Addr, Len);
    end Push_Pixels;
 
    -----------------
    -- Push_Pixels --
    -----------------
 
-   procedure Push_Pixels_Swap (Data : aliased in out HAL.UInt16_Array) is
-      Actual_Pixels : Texture_1D_Array (0 .. Natural (Width * Height - 1))
-        with
-          Address => SDL_Pixels;
-
+   procedure Push_Pixels_Swap (Addr : System.Address; Len : Natural) is
+      procedure Push is new Push_Pixels_Gen (RGB565_To_Color);
    begin
-      for Pix of Data loop
-         if Debug_Enabled then
-            Actual_Pixels (X + Y * Width) := Debug_Color;
-         else
-            Actual_Pixels (X + Y * Width) := Pix;
-         end if;
-
-         if X = XE then
-            X := XS;
-            if Y = YE then
-               Y := YS;
-            else
-               Y := Y + 1;
-            end if;
-         else
-            X := X + 1;
-         end if;
-      end loop;
-
-      if Debug_Enabled then
-         Debug_Color := Debug_Color + 1000;
-      end if;
+      Push (Addr, Len);
    end Push_Pixels_Swap;
 
    ------------
@@ -264,10 +171,10 @@ package body PyGamer.Screen is
    -- Start_DMA --
    ---------------
 
-   procedure Start_DMA (Data : not null Framebuffer_Access) is
+   procedure Start_DMA (Addr : System.Address; Len : Natural) is
    begin
       --  We don't really have a DMA here...
-      Push_Pixels (Data.all);
+      Push_Pixels (Addr, Len);
    end Start_DMA;
 
    ---------------------
@@ -276,6 +183,4 @@ package body PyGamer.Screen is
 
    procedure Wait_End_Of_DMA is null;
 
-begin
-   Initialize;
 end PyGamer.Screen;

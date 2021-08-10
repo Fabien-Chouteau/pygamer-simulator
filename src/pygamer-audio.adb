@@ -1,53 +1,59 @@
+with Ada.Text_IO; use Ada.Text_IO;
+with GNAT.OS_Lib;
 with System;
+
 with Interfaces;   use Interfaces;
 with Interfaces.C; use Interfaces.C;
 
-with GNAT.OS_Lib;
+with Sf.Audio; use Sf.Audio;
+with Sf.Audio.SoundStream; use Sf.Audio.SoundStream;
+with Sf; use Sf;
 
 package body PyGamer.Audio is
 
+   Stream : sfSoundStream_Ptr;
    User_Callback : Audio_Callback := null;
 
-   type SDL_Data_Array is array (Natural) of Integer_16;
-   type SDL_Data_Array_Access is access all SDL_Data_Array;
+   Stream_Data : array (1 .. 1024) of aliased sfInt16;
 
-   procedure SDL_Audio_Callback (Userdata : System.Address;
-                                 Stream   : SDL_Data_Array_Access;
-                                 Len      : Interfaces.C.int);
-   pragma Export (C, SDL_Audio_Callback, "sdl_audio_callback");
+   function SFML_Audio_Callback (chunk  : access sfSoundStreamChunk;
+                                 Unused : System.Address)
+                                 return sfBool
+     with Convention => C;
 
-   function Init_SDL_Audio (Sample_Rate : Interfaces.C.int)
-                            return Interfaces.C.int;
-   pragma Import (C, Init_SDL_Audio, "init_sdl_audio");
+   function Convert (Sample : Unsigned_16) return sfInt16
+   is (sfInt16 (Integer_32 (Sample) - 32_768));
 
-   function Convert (Sample : Unsigned_16) return Integer_16
-   is (Integer_16 (Integer_32 (Sample) - 32_768));
 
-   ------------------------
-   -- SDL_Audio_Callback --
-   ------------------------
+   -------------------------
+   -- SFML_Audio_Callback --
+   -------------------------
 
-   procedure SDL_Audio_Callback (Userdata : System.Address;
-                                 Stream   : SDL_Data_Array_Access;
-                                 Len      : Interfaces.C.int)
+   function SFML_Audio_Callback (chunk  : access sfSoundStreamChunk;
+                                 Unused : System.Address)
+                                 return sfBool
    is
-      Stream_Index : Natural := Stream'First;
-      Left : Data_Array (Stream'First .. Integer (Len) / 4);
-      Right : Data_Array (Stream'First .. Integer (Len) / 4);
+      Len : constant Natural := Stream_Data'Length;
+      Left : Data_Array (1 .. Integer (Len) / 2);
+      Right : Data_Array (1 .. Integer (Len) / 2);
+      Stream_Index : Natural := Stream_Data'First;
    begin
       if User_Callback /= null then
          User_Callback (Left, Right);
 
          for Index in Left'Range loop
-            Stream (Stream_Index) := Convert (Left (Index));
-            Stream (Stream_Index + 1) := Convert (Right (Index));
+            Stream_Data (Stream_Index) := Convert (Left (Index));
+            Stream_Data (Stream_Index + 1) := Convert (Right (Index));
             Stream_Index := Stream_Index + 2;
          end loop;
       else
-         Stream (Stream'First .. Integer (Len) / 2) := (others => 0);
+         Stream_Data := (others => 0);
       end if;
 
-   end SDL_Audio_Callback;
+      chunk.Samples := Stream_Data (Stream_Data'First)'access;
+      chunk.NbSamples := Stream_Data'Length;
+      return True;
+   end SFML_Audio_Callback;
 
    ------------------
    -- Set_Callback --
@@ -58,17 +64,27 @@ package body PyGamer.Audio is
    begin
       User_Callback := Callback;
 
-      if GNAT.OS_Lib.Getenv ("OS").all = "Windows_NT" then -- Memory leak right here...
-         GNAT.OS_Lib.Setenv ("SDL_AUDIODRIVER", "directsound");
+      if Stream /= null then
+         Stop (Stream);
+         destroy (Stream);
       end if;
 
-      if Init_SDL_Audio (case Sample_Rate is
-                            when SR_11025 => 11_025,
-                            when SR_22050 => 22_050,
-                            when SR_44100 => 44_110,
-                            when SR_96000 => 96_000) /= 0
-      then
-         raise Program_Error with "SDL Audio init failed";
+      Stream := create (onGetData    => SFML_Audio_Callback'Access,
+                        onSeek       => null,
+                        channelCount => 2,
+                        sampleRate   => (case Sample_Rate is
+                                            when SR_11025 => 11_025,
+                                            when SR_22050 => 22_050,
+                                            when SR_44100 => 44_110,
+                                            when SR_96000 => 96_000),
+                        userData     => System.Null_Address);
+
+      if Stream = null then
+         Put_Line ("Could not create audio stream");
+         GNAT.OS_Lib.OS_Exit (1);
+      else
+         play (Stream);
       end if;
+
    end Set_Callback;
 end PyGamer.Audio;
