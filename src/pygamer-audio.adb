@@ -12,7 +12,8 @@ with Sf; use Sf;
 package body PyGamer.Audio is
 
    Stream : sfSoundStream_Ptr;
-   User_Callback : Audio_Callback := null;
+   User_Callback : Audio_Callback := null
+     with Atomic, Volatile;
 
    Stream_Data : array (1 .. 1024) of aliased sfInt16;
 
@@ -37,9 +38,11 @@ package body PyGamer.Audio is
       Left : Data_Array (1 .. Integer (Len) / 2);
       Right : Data_Array (1 .. Integer (Len) / 2);
       Stream_Index : Natural := Stream_Data'First;
+
+      CB : Audio_Callback := User_Callback;
    begin
-      if User_Callback /= null then
-         User_Callback (Left, Right);
+      if CB /= null then
+         CB (Left, Right);
 
          for Index in Left'Range loop
             Stream_Data (Stream_Index) := Convert (Left (Index));
@@ -87,4 +90,10 @@ package body PyGamer.Audio is
       end if;
 
    end Set_Callback;
+
+begin
+   if GNAT.OS_Lib.Getenv ("OS").all = "Windows_NT" then
+      --  Select driver for openal on Windows
+      GNAT.OS_Lib.Setenv ("ALSOFT_DRIVERS", "dsound");
+   end if;
 end PyGamer.Audio;
